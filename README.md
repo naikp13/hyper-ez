@@ -60,7 +60,7 @@ The enhancement process follows these steps:
 
 ## Output Files
 
-- `benchmark_hyperspectral.tif`: Original hyperspectral reference data
+- `hyperspectral.tif`: Original hyperspectral reference data
 - `processed_sentinel2.tif`: Processed 12-band Sentinel-2 imagery
 - `high_resolution_imagery.tif`: Reprojected ESRI World Imagery
 - Enhanced hyperspectral arrays (in-memory)
@@ -101,7 +101,7 @@ The package includes comprehensive error handling for:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Citation
 
