@@ -1,3 +1,5 @@
+### Hyper-EZ: Hyperspectral Easy Enhancement Package
+Hyper-EZ is a Python based package for enhancing hyperspectral imagery using the an imporved version of the Parallel patch-wise sparse residual learning algorithm (p2sr) published in https://www.mdpi.com/2072-4292/17/11/1878 . It combines Sentinel-2 multispectral data and high-resolution imagery (ESRI World Imagery) using a sophisticated reconstruction and enhancement process to increase the spatial resolution of hyperspectral imaging data while preserving spectral information.
 
 ### Key Components
 
@@ -55,23 +57,6 @@ The enhancement process follows these steps:
 - **Multispectral Data**: Sentinel-2 Level-2A (via AWS Earth Search STAC API)
 - **High-Resolution Imagery**: ESRI World Imagery Service
 
-## Supported Satellite Bands
-
-### Sentinel-2 Bands
-| Band | Name | Resolution | Wavelength (nm) |
-|------|------|------------|----------------|
-| B01  | Coastal | 60m | 443 |
-| B02  | Blue | 10m | 490 |
-| B03  | Green | 10m | 560 |
-| B04  | Red | 10m | 665 |
-| B05  | Red Edge 1 | 20m | 705 |
-| B06  | Red Edge 2 | 20m | 740 |
-| B07  | Red Edge 3 | 20m | 783 |
-| B08  | NIR | 10m | 842 |
-| B8A  | NIR Narrow | 20m | 865 |
-| B09  | Water Vapor | 60m | 945 |
-| B11  | SWIR 1 | 20m | 1610 |
-| B12  | SWIR 2 | 20m | 2190 |
 
 ## Output Files
 
@@ -120,14 +105,18 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Citation
 
-If you use this software in your research, please cite:
-
+This is a pre-release version. The hyper-ez github package is under-development and will be published soon. Please cite the following paper if this version of package was used, 
 ```bibtex
-@software{hyper_ez,
-  title={Hyper-EZ: Hyperspectral Image Enhancement},
-  author={Your Name},
-  year={2024},
-  url={https://github.com/your-username/hyper-ez}
+@article{naik2025scalable,
+  author = {Parth Naik and Rupsa Chakraborty and Sam Thiele and Richard Gloaguen},
+  title = {Scalable Hyperspectral Enhancement via Patch-Wise Sparse Residual Learning: Insights from Super-Resolved EnMAP Data},
+  journal = {Remote Sensing},
+  volume = {17},
+  number = {11},
+  article = {1878},
+  year = {2025},
+  doi = {10.3390/rs17111878},
+  url = {https://doi.org/10.3390/rs17111878}
 }
 ```
 
@@ -141,7 +130,7 @@ If you use this software in your research, please cite:
 
 For questions, issues, or contributions, please:
 - Open an issue on GitHub
-- Contact: your.email@example.com
+- Contact: parthnaik1993@gmail.com
 
 ---
 
