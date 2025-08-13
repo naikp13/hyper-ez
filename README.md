@@ -1,5 +1,5 @@
 ### Hyper-EZ: Hyperspectral Easy Enhancement Package
-Hyper-EZ is a python based package for enhancing hyperspectral imagery using the an imporved version of the Parallel patch-wise sparse residual learning algorithm (p2sr) published in https://www.mdpi.com/2072-4292/17/11/1878 . It combines Sentinel-2 multispectral data and high-resolution imagery (ESRI World Imagery) using a sophisticated reconstruction and enhancement process to increase the spatial resolution of hyperspectral imaging data while preserving spectral information.
+Hyper-EZ is a python based package for enhancing hyperspectral imagery using an Imporoved Parallel Patch-wise Sparse Residual learning algorithm (ip2sr), an upgraded version of the p2sr algorithm published in https://www.mdpi.com/2072-4292/17/11/1878). It combines Sentinel-2 multispectral data and high-resolution imagery (ESRI World Imagery) through a fully automated architecture using a sophisticated reconstruction and enhancement process to increase the spatial resolution of hyperspectral imaging data while preserving spectral information.
 
 ### Key Components
 
