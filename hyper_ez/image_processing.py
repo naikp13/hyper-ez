@@ -39,6 +39,17 @@ class HyperspectralProcessor:
         # Calculate target dimensions
         target_width = int((reference_bounds.right - reference_bounds.left) / target_resolution)
         target_height = int((reference_bounds.top - reference_bounds.bottom) / target_resolution)
+        
+        # Ensure minimum dimensions
+        target_width = max(1, target_width)
+        target_height = max(1, target_height)
+        
+        # Limit maximum dimensions to prevent API errors
+        max_dimension = 4096
+        if target_width > max_dimension or target_height > max_dimension:
+            scale_factor = min(max_dimension / target_width, max_dimension / target_height)
+            target_width = int(target_width * scale_factor)
+            target_height = int(target_height * scale_factor)
 
         # Prepare ESRI API parameters
         bbox_string = f"{esri_bounds[0]},{esri_bounds[1]},{esri_bounds[2]},{esri_bounds[3]}"
@@ -60,9 +71,46 @@ class HyperspectralProcessor:
             response = self.downloader.session.get(ESRI_IMAGERY_URL, params=request_params,
                                                  timeout=self.downloader.timeout)
             response.raise_for_status()
+            
+            # Validate response content
+            content_type = response.headers.get('content-type', '').lower()
+            if 'image' not in content_type and 'tiff' not in content_type:
+                # Check if response contains error message
+                try:
+                    response_text = response.content.decode('utf-8')[:500]  # First 500 chars
+                    if 'error' in response_text.lower() or 'html' in response_text.lower():
+                        raise Exception(f"API returned error response: {response_text}")
+                except UnicodeDecodeError:
+                    pass  # Binary content, might be valid image
+            
+            # Check content length
+            if len(response.content) < 100:  # Very small response likely an error
+                try:
+                    error_msg = response.content.decode('utf-8')
+                    raise Exception(f"API returned small response (likely error): {error_msg}")
+                except UnicodeDecodeError:
+                    raise Exception(f"API returned unexpectedly small response: {len(response.content)} bytes")
+            
+            # Check if content starts with TIFF magic bytes
+            tiff_signatures = [b'II*\x00', b'MM\x00*']  # Little-endian and big-endian TIFF
+            if not any(response.content.startswith(sig) for sig in tiff_signatures):
+                # Try to decode first part to see what we got
+                try:
+                    preview = response.content[:200].decode('utf-8', errors='ignore')
+                    raise Exception(f"Response is not a valid TIFF file. Content preview: {preview}")
+                except:
+                    raise Exception(f"Response is not a valid TIFF file. Content length: {len(response.content)} bytes")
 
             with open(temp_esri_path, 'wb') as file:
                 file.write(response.content)
+            
+            # Verify the downloaded file can be opened
+            try:
+                with rasterio.open(temp_esri_path) as test_src:
+                    if test_src.width == 0 or test_src.height == 0:
+                        raise Exception("Downloaded image has zero dimensions")
+            except Exception as e:
+                raise Exception(f"Downloaded file is not a valid raster: {e}")
 
             # Reproject to reference CRS
             self._reproject_esri_imagery(temp_esri_path, output_path, reference_bounds,
