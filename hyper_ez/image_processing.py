@@ -200,7 +200,33 @@ class HyperspectralProcessor:
         """Save enhanced hyperspectral data to GeoTIFF."""
         with rasterio.open(reference_path) as reference:
             metadata = reference.meta.copy()
-            metadata.update(count=enhanced_data.shape[2], dtype='float32')
+            
+            # Update metadata to match enhanced data dimensions
+            metadata.update({
+                'height': enhanced_data.shape[0],
+                'width': enhanced_data.shape[1], 
+                'count': enhanced_data.shape[2],
+                'dtype': 'float32'
+            })
+            
+            # Recalculate transform if dimensions changed
+            if (enhanced_data.shape[0] != reference.height or 
+                enhanced_data.shape[1] != reference.width):
+                # Scale the transform based on dimension ratio
+                scale_y = reference.height / enhanced_data.shape[0]
+                scale_x = reference.width / enhanced_data.shape[1]
+                
+                from rasterio.transform import Affine
+                old_transform = reference.transform
+                new_transform = Affine(
+                    old_transform.a * scale_x,  # pixel width
+                    old_transform.b,
+                    old_transform.c,  # top-left x
+                    old_transform.d,
+                    old_transform.e * scale_y,  # pixel height (negative)
+                    old_transform.f   # top-left y
+                )
+                metadata.update({'transform': new_transform})
 
         with rasterio.open(output_path, 'w', **metadata) as destination:
             for band_index in range(enhanced_data.shape[2]):
