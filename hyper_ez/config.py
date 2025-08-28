@@ -19,8 +19,8 @@ ESRI_IMAGERY_URL = "https://services.arcgisonline.com/ArcGIS/rest/services/World
 BENCHMARK_DATA_URL = "https://raw.githubusercontent.com/naikp13/hsi_enhancement/main/data/enmap_valclip_marinkas.tif"
 
 # Processing Parameters
-DEFAULT_CLOUD_COVER_THRESHOLD = 5
-DEFAULT_DATE_RANGE_DAYS = 30
+DEFAULT_CLOUD_COVER_THRESHOLD = 10
+DEFAULT_DATE_RANGE_DAYS = 100
 TARGET_RESOLUTION_METERS = 10.0
 HIGH_RESOLUTION_METERS = 2.0
 
