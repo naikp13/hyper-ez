@@ -84,6 +84,11 @@ class GeospatialProcessor:
     def _clip_and_resample_band(self, input_path, output_path, reference_bounds,
                                reference_crs, target_resolution):
         """Clip and resample a single band to target resolution."""
+        # Validate target_resolution to prevent division by zero
+        if target_resolution <= 0:
+            print(f"Warning: Invalid target_resolution ({target_resolution}). Using default 10m resolution.")
+            target_resolution = 10.0  # Default to 10 meter resolution
+            
         with rasterio.open(input_path) as source:
             # Clip to reference bounds
             window = from_bounds(*reference_bounds, transform=source.transform)
@@ -91,9 +96,16 @@ class GeospatialProcessor:
             source_transform = source.window_transform(window)
             source_crs = source.crs
 
+            # Add this debug line before the calculation
+            print(f"Debug: target_resolution = {target_resolution}, bounds = {reference_bounds}")
+            
             # Calculate target dimensions
             target_width = int((reference_bounds.right - reference_bounds.left) / target_resolution)
             target_height = int((reference_bounds.top - reference_bounds.bottom) / target_resolution)
+            
+            # Additional validation for dimensions
+            if target_width <= 0 or target_height <= 0:
+                raise ValueError(f"Invalid target dimensions: width={target_width}, height={target_height}")
 
             destination_transform = rasterio.transform.from_bounds(
                 reference_bounds.left, reference_bounds.bottom,
