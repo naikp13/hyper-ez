@@ -40,81 +40,67 @@ class HyperspectralProcessor:
         target_width = int((reference_bounds.right - reference_bounds.left) / target_resolution)
         target_height = int((reference_bounds.top - reference_bounds.bottom) / target_resolution)
         
-        # Ensure minimum dimensions
-        target_width = max(1, target_width)
-        target_height = max(1, target_height)
-        
-        # Limit maximum dimensions to prevent API errors
-        max_dimension = 4096
-        if target_width > max_dimension or target_height > max_dimension:
-            scale_factor = min(max_dimension / target_width, max_dimension / target_height)
-            target_width = int(target_width * scale_factor)
-            target_height = int(target_height * scale_factor)
+        # Ensure minimum dimensions and reasonable limits
+        target_width = max(256, min(target_width, 2048))  # Between 256 and 2048 pixels
+        target_height = max(256, min(target_height, 2048))
 
-        # Prepare ESRI API parameters
+        # Prepare ESRI API parameters - use PNG format which is more reliable
         bbox_string = f"{esri_bounds[0]},{esri_bounds[1]},{esri_bounds[2]},{esri_bounds[3]}"
         request_params = {
             'bbox': bbox_string,
             'bboxSR': esri_crs.to_epsg(),
+            'imageSR': esri_crs.to_epsg(),
             'size': f"{target_width},{target_height}",
-            'format': 'tiff',
+            'format': 'png',  # Changed from 'tiff' to 'png'
             'pixelType': 'U8',
-            'noData': '0',
+            'noData': '',
+            'interpolation': 'RSP_BilinearInterpolation',
             'f': 'image'
         }
 
-        temp_esri_path = 'temp_esri_imagery.tif'
+        temp_esri_path = 'temp_esri_imagery.png'  # Changed extension
         output_path = 'high_resolution_imagery.tif'
 
         try:
+            print(f"Requesting ESRI imagery with dimensions: {target_width}x{target_height}")
+            print(f"Bounds: {bbox_string}")
+            
             # Download ESRI imagery
             response = self.downloader.session.get(ESRI_IMAGERY_URL, params=request_params,
                                                  timeout=self.downloader.timeout)
             response.raise_for_status()
             
-            # Validate response content
-            content_type = response.headers.get('content-type', '').lower()
-            if 'image' not in content_type and 'tiff' not in content_type:
-                # Check if response contains error message
-                try:
-                    response_text = response.content.decode('utf-8')[:500]  # First 500 chars
-                    if 'error' in response_text.lower() or 'html' in response_text.lower():
-                        raise Exception(f"API returned error response: {response_text}")
-                except UnicodeDecodeError:
-                    pass  # Binary content, might be valid image
-            
             # Check content length
-            if len(response.content) < 100:  # Very small response likely an error
+            if len(response.content) < 1000:  # Very small response likely an error
                 try:
-                    error_msg = response.content.decode('utf-8')
+                    error_msg = response.content.decode('utf-8', errors='ignore')[:200]
                     raise Exception(f"API returned small response (likely error): {error_msg}")
-                except UnicodeDecodeError:
+                except:
                     raise Exception(f"API returned unexpectedly small response: {len(response.content)} bytes")
             
-            # Check if content starts with TIFF magic bytes
-            tiff_signatures = [b'II*\x00', b'MM\x00*']  # Little-endian and big-endian TIFF
-            if not any(response.content.startswith(sig) for sig in tiff_signatures):
-                # Try to decode first part to see what we got
+            # Check if content is a valid image (PNG or JPEG)
+            png_signature = b'\x89PNG\r\n\x1a\n'
+            jpeg_signatures = [b'\xff\xd8\xff']
+            
+            is_valid_image = (response.content.startswith(png_signature) or 
+                            any(response.content.startswith(sig) for sig in jpeg_signatures))
+            
+            if not is_valid_image:
                 try:
                     preview = response.content[:200].decode('utf-8', errors='ignore')
-                    raise Exception(f"Response is not a valid TIFF file. Content preview: {preview}")
+                    raise Exception(f"Response is not a valid image file. Content preview: {preview}")
                 except:
-                    raise Exception(f"Response is not a valid TIFF file. Content length: {len(response.content)} bytes")
+                    raise Exception(f"Response is not a valid image file. Content length: {len(response.content)} bytes")
 
+            # Save the downloaded image
             with open(temp_esri_path, 'wb') as file:
                 file.write(response.content)
             
-            # Verify the downloaded file can be opened
-            try:
-                with rasterio.open(temp_esri_path) as test_src:
-                    if test_src.width == 0 or test_src.height == 0:
-                        raise Exception("Downloaded image has zero dimensions")
-            except Exception as e:
-                raise Exception(f"Downloaded file is not a valid raster: {e}")
-
-            # Reproject to reference CRS
-            self._reproject_esri_imagery(temp_esri_path, output_path, reference_bounds,
-                                       reference_crs, esri_bounds, target_width, target_height)
+            print(f"Downloaded image: {len(response.content)} bytes")
+            
+            # Convert PNG to GeoTIFF with proper georeferencing
+            self._convert_and_reproject_esri_imagery(temp_esri_path, output_path, reference_bounds,
+                                                   reference_crs, esri_bounds, target_width, target_height)
 
             os.remove(temp_esri_path)
             return output_path
@@ -124,48 +110,75 @@ class HyperspectralProcessor:
                 os.remove(temp_esri_path)
             raise Exception(f"Error acquiring high-resolution imagery: {e}")
 
-    def _reproject_esri_imagery(self, input_path, output_path, reference_bounds,
-                               reference_crs, esri_bounds, target_width, target_height):
-        """Reproject ESRI imagery to reference coordinate system."""
-        with rasterio.open(input_path) as source:
-            source_data = source.read()
-            source_crs = CRS.from_epsg(3857)
-
-            source_transform = transform_from_bounds(
-                esri_bounds[0], esri_bounds[1], esri_bounds[2], esri_bounds[3],
-                source.width, source.height
-            )
-
-            destination_transform = transform_from_bounds(
-                reference_bounds.left, reference_bounds.bottom,
-                reference_bounds.right, reference_bounds.top,
-                target_width, target_height
-            )
-
-            reprojected_data = np.zeros((source_data.shape[0], target_height, target_width), dtype='uint8')
-
+    def _convert_and_reproject_esri_imagery(self, input_path, output_path, reference_bounds,
+                                          reference_crs, esri_bounds, target_width, target_height):
+        """Convert PNG/JPEG to GeoTIFF and reproject to reference coordinate system."""
+        from PIL import Image
+        import numpy as np
+        
+        # Open the image with PIL to handle PNG/JPEG
+        with Image.open(input_path) as img:
+            # Convert to RGB if necessary
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Convert to numpy array
+            img_array = np.array(img)
+            
+            # Transpose to (bands, height, width) format for rasterio
+            if len(img_array.shape) == 3:
+                img_array = np.transpose(img_array, (2, 0, 1))
+            else:
+                img_array = img_array[np.newaxis, :, :]
+        
+        # Create transform for the ESRI bounds (Web Mercator)
+        esri_transform = transform_from_bounds(
+            esri_bounds[0], esri_bounds[1], esri_bounds[2], esri_bounds[3],
+            img_array.shape[2], img_array.shape[1]
+        )
+        
+        # Calculate target dimensions for reprojection
+        target_width_reproj = int((reference_bounds.right - reference_bounds.left) / target_resolution)
+        target_height_reproj = int((reference_bounds.top - reference_bounds.bottom) / target_resolution)
+        target_width_reproj = max(1, target_width_reproj)
+        target_height_reproj = max(1, target_height_reproj)
+        
+        # Create destination transform
+        destination_transform = transform_from_bounds(
+            reference_bounds.left, reference_bounds.bottom,
+            reference_bounds.right, reference_bounds.top,
+            target_width_reproj, target_height_reproj
+        )
+        
+        # Prepare output array
+        reprojected_data = np.zeros((img_array.shape[0], target_height_reproj, target_width_reproj), dtype='uint8')
+        
+        # Reproject each band
+        for band_idx in range(img_array.shape[0]):
             reproject(
-                source=source_data,
-                destination=reprojected_data,
-                src_transform=source_transform,
-                src_crs=source_crs,
+                source=img_array[band_idx],
+                destination=reprojected_data[band_idx],
+                src_transform=esri_transform,
+                src_crs=CRS.from_epsg(3857),
                 dst_transform=destination_transform,
                 dst_crs=reference_crs,
                 resampling=Resampling.bilinear
             )
-
-            output_metadata = source.meta.copy()
-            output_metadata.update({
-                'height': target_height,
-                'width': target_width,
-                'transform': destination_transform,
-                'crs': reference_crs,
-                'dtype': 'uint8',
-                'count': source_data.shape[0]
-            })
-
-            with rasterio.open(output_path, 'w', **output_metadata) as destination:
-                destination.write(reprojected_data)
+        
+        # Save as GeoTIFF
+        output_metadata = {
+            'driver': 'GTiff',
+            'height': target_height_reproj,
+            'width': target_width_reproj,
+            'count': reprojected_data.shape[0],
+            'dtype': 'uint8',
+            'crs': reference_crs,
+            'transform': destination_transform,
+            'compress': 'lzw'
+        }
+        
+        with rasterio.open(output_path, 'w', **output_metadata) as dst:
+            dst.write(reprojected_data)
 
     def enhance_hyperspectral_image(self, multispectral_path, hyperspectral_path,
                                   patch_size=DEFAULT_PATCH_SIZE, stride=DEFAULT_STRIDE,
