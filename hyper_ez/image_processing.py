@@ -100,7 +100,7 @@ class HyperspectralProcessor:
             
             # Convert PNG to GeoTIFF with proper georeferencing
             self._convert_and_reproject_esri_imagery(temp_esri_path, output_path, reference_bounds,
-                                                   reference_crs, esri_bounds, target_width, target_height)
+                                                   reference_crs, esri_bounds, target_width, target_height, target_resolution)
 
             os.remove(temp_esri_path)
             return output_path
@@ -111,7 +111,7 @@ class HyperspectralProcessor:
             raise Exception(f"Error acquiring high-resolution imagery: {e}")
 
     def _convert_and_reproject_esri_imagery(self, input_path, output_path, reference_bounds,
-                                          reference_crs, esri_bounds, target_width, target_height):
+                                          reference_crs, esri_bounds, target_width, target_height, target_resolution):
         """Convert PNG/JPEG to GeoTIFF and reproject to reference coordinate system."""
         from PIL import Image
         import numpy as np
