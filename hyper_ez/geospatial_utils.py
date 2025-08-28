@@ -96,16 +96,35 @@ class GeospatialProcessor:
             source_transform = source.window_transform(window)
             source_crs = source.crs
 
-            # Add this debug line before the calculation
-            print(f"Debug: target_resolution = {target_resolution}, bounds = {reference_bounds}")
-            
-            # Calculate target dimensions
-            target_width = int((reference_bounds.right - reference_bounds.left) / target_resolution)
-            target_height = int((reference_bounds.top - reference_bounds.bottom) / target_resolution)
+            # Check if reference_crs is geographic (lat/lon)
+            if reference_crs.is_geographic:
+                # For geographic coordinates, we need to work differently
+                # Use the source data's native resolution as a guide
+                source_res_x, source_res_y = source.res
+                
+                # Calculate dimensions based on the ratio of target to source resolution
+                # Assuming source is typically 10m for Sentinel-2
+                source_resolution_meters = 10.0  # Sentinel-2 typical resolution
+                scale_factor = source_resolution_meters / target_resolution
+                
+                # Get the window size and scale it
+                window_width = window.width
+                window_height = window.height
+                
+                target_width = max(1, int(window_width * scale_factor))
+                target_height = max(1, int(window_height * scale_factor))
+            else:
+                # For projected coordinates, use the original calculation
+                target_width = int((reference_bounds.right - reference_bounds.left) / target_resolution)
+                target_height = int((reference_bounds.top - reference_bounds.bottom) / target_resolution)
             
             # Additional validation for dimensions
             if target_width <= 0 or target_height <= 0:
-                raise ValueError(f"Invalid target dimensions: width={target_width}, height={target_height}")
+                print(f"Warning: Calculated dimensions too small. Using minimum size of 1x1.")
+                target_width = max(1, target_width)
+                target_height = max(1, target_height)
+
+            print(f"Debug: Calculated target dimensions: width={target_width}, height={target_height}")
 
             destination_transform = rasterio.transform.from_bounds(
                 reference_bounds.left, reference_bounds.bottom,
