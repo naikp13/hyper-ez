@@ -84,108 +84,25 @@ class GeospatialProcessor:
     def _clip_and_resample_band(self, input_path, output_path, reference_bounds,
                                reference_crs, target_resolution):
         """Clip and resample a single band to target resolution."""
-        # Validate target_resolution to prevent division by zero
-        if target_resolution <= 0:
-            print(f"Warning: Invalid target_resolution ({target_resolution}). Using default 10m resolution.")
-            target_resolution = 10.0  # Default to 10 meter resolution
-            
         with rasterio.open(input_path) as source:
-            # Transform reference bounds to source CRS if needed
-            if reference_crs != source.crs:
-                from rasterio.warp import transform_bounds
-                transformed_bounds = transform_bounds(reference_crs, source.crs, 
-                                                    reference_bounds.left, reference_bounds.bottom,
-                                                    reference_bounds.right, reference_bounds.top)
-                clip_bounds = transformed_bounds
-            else:
-                clip_bounds = (reference_bounds.left, reference_bounds.bottom, 
-                             reference_bounds.right, reference_bounds.top)
-            
-            # Get intersection with source bounds to ensure valid window
-            src_bounds = source.bounds
-            intersect_left = max(clip_bounds[0], src_bounds.left)
-            intersect_bottom = max(clip_bounds[1], src_bounds.bottom)
-            intersect_right = min(clip_bounds[2], src_bounds.right)
-            intersect_top = min(clip_bounds[3], src_bounds.top)
-            
-            # Check if there's a valid intersection
-            if intersect_left >= intersect_right or intersect_bottom >= intersect_top:
-                raise ValueError(f"No intersection between reference bounds and source image bounds")
-            
-            # Create window from intersected bounds
-            try:
-                window = from_bounds(intersect_left, intersect_bottom, 
-                                   intersect_right, intersect_top, 
-                                   transform=source.transform)
-                
-                # Ensure window has valid dimensions
-                if window.width <= 0 or window.height <= 0:
-                    raise ValueError(f"Invalid window dimensions: {window.width}x{window.height}")
-                    
-                band_data = source.read(1, window=window)
-                
-                # Validate band_data dimensions
-                if band_data.size == 0 or band_data.shape[0] == 0 or band_data.shape[1] == 0:
-                    raise ValueError(f"Empty band data after windowed read: shape={band_data.shape}")
-                    
-            except Exception as e:
-                print(f"Error creating window or reading data: {e}")
-                # Fallback: read entire source and let reproject handle the clipping
-                band_data = source.read(1)
-                window = None
-                intersect_bounds = src_bounds
-                
-            if window is not None:
-                source_transform = source.window_transform(window)
-                work_bounds = (intersect_left, intersect_bottom, intersect_right, intersect_top)
-            else:
-                source_transform = source.transform
-                work_bounds = src_bounds
-            
+            # Clip to reference bounds
+            window = from_bounds(*reference_bounds, transform=source.transform)
+            band_data = source.read(1, window=window)
+            source_transform = source.window_transform(window)
             source_crs = source.crs
 
-            # Calculate target dimensions based on the working bounds
-            if reference_crs.is_geographic:
-                # For geographic coordinates, use source pixel dimensions as reference
-                src_res_x, src_res_y = source.res
-                
-                # Rough conversion for geographic coordinates
-                if source.crs.is_geographic:
-                    # Convert degrees to approximate meters (rough estimate)
-                    src_res_x_meters = abs(src_res_x) * 111000  # 1 degree ≈ 111km
-                    src_res_y_meters = abs(src_res_y) * 111000
-                else:
-                    src_res_x_meters = abs(src_res_x)
-                    src_res_y_meters = abs(src_res_y)
-                
-                # Calculate scale factor
-                scale_x = src_res_x_meters / target_resolution
-                scale_y = src_res_y_meters / target_resolution
-                
-                # Apply to actual data dimensions
-                target_width = max(1, int(band_data.shape[1] * scale_x))
-                target_height = max(1, int(band_data.shape[0] * scale_y))
-            else:
-                # For projected coordinates
-                bounds_width = work_bounds[2] - work_bounds[0]
-                bounds_height = work_bounds[3] - work_bounds[1]
-                target_width = max(1, int(bounds_width / target_resolution))
-                target_height = max(1, int(bounds_height / target_resolution))
+            # Calculate target dimensions
+            target_width = int((reference_bounds.right - reference_bounds.left) / target_resolution)
+            target_height = int((reference_bounds.top - reference_bounds.bottom) / target_resolution)
 
-            print(f"Debug: Final target dimensions: width={target_width}, height={target_height}")
-            print(f"Debug: Band data shape: {band_data.shape}")
-
-            # Create destination transform for the reference bounds (not working bounds)
             destination_transform = rasterio.transform.from_bounds(
                 reference_bounds.left, reference_bounds.bottom,
                 reference_bounds.right, reference_bounds.top,
                 target_width, target_height
             )
 
-            # Create output array with validated dimensions
+            # Resample data
             resampled_data = np.zeros((target_height, target_width), dtype='uint16')
-            
-            # Perform reprojection
             reproject(
                 source=band_data,
                 destination=resampled_data,
