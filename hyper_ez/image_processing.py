@@ -180,33 +180,216 @@ class HyperspectralProcessor:
         with rasterio.open(output_path, 'w', **output_metadata) as dst:
             dst.write(reprojected_data)
 
+    def _coregister_datasets(self, multispectral_path, hyperspectral_path):
+        """Perform co-registration between MSI and HSI datasets when spatial misalignment is detected."""
+        try:
+            with rasterio.open(multispectral_path) as msi, rasterio.open(hyperspectral_path) as hsi:
+                # Check if co-registration is needed
+                needs_coregistration = False
+                
+                # Check CRS mismatch
+                if msi.crs != hsi.crs:
+                    print("Co-registration needed: CRS mismatch")
+                    needs_coregistration = True
+                
+                # Check resolution mismatch (significant difference)
+                msi_res = abs(msi.res[0])  # Use x-resolution
+                hsi_res = abs(hsi.res[0])
+                res_ratio = max(msi_res, hsi_res) / min(msi_res, hsi_res)
+                
+                if res_ratio > 2.0:  # More than 2x difference
+                    print(f"Co-registration needed: Resolution mismatch (MSI: {msi_res:.2f}m, HSI: {hsi_res:.2f}m)")
+                    needs_coregistration = True
+                
+                # Check bounds alignment
+                msi_bounds = msi.bounds
+                hsi_bounds = hsi.bounds
+                
+                # Calculate overlap
+                overlap_left = max(msi_bounds.left, hsi_bounds.left)
+                overlap_bottom = max(msi_bounds.bottom, hsi_bounds.bottom)
+                overlap_right = min(msi_bounds.right, hsi_bounds.right)
+                overlap_top = min(msi_bounds.top, hsi_bounds.top)
+                
+                if overlap_left < overlap_right and overlap_bottom < overlap_top:
+                    overlap_area = (overlap_right - overlap_left) * (overlap_top - overlap_bottom)
+                    msi_area = (msi_bounds.right - msi_bounds.left) * (msi_bounds.top - msi_bounds.bottom)
+                    hsi_area = (hsi_bounds.right - hsi_bounds.left) * (hsi_bounds.top - hsi_bounds.bottom)
+                    
+                    overlap_ratio_msi = overlap_area / msi_area
+                    overlap_ratio_hsi = overlap_area / hsi_area
+                    
+                    if overlap_ratio_msi < 0.9 or overlap_ratio_hsi < 0.9:
+                        print(f"Co-registration needed: Limited overlap (MSI: {overlap_ratio_msi:.1%}, HSI: {overlap_ratio_hsi:.1%})")
+                        needs_coregistration = True
+                
+                if needs_coregistration:
+                    print("Performing automatic co-registration...")
+                    coregistered_msi_path = self._perform_coregistration(multispectral_path, hyperspectral_path)
+                    return coregistered_msi_path, hyperspectral_path
+                else:
+                    print("No co-registration needed - datasets are well aligned")
+                    return multispectral_path, hyperspectral_path
+                    
+        except Exception as e:
+            print(f"Co-registration check failed: {e}")
+            return multispectral_path, hyperspectral_path
+    
+    def _perform_coregistration(self, multispectral_path, hyperspectral_path):
+        """Perform the actual co-registration by reprojecting MSI to match HSI spatial properties."""
+        coregistered_path = 'coregistered_msi.tif'
+        
+        try:
+            with rasterio.open(hyperspectral_path) as hsi_ref:
+                # Use HSI as the reference for co-registration
+                target_crs = hsi_ref.crs
+                target_bounds = hsi_ref.bounds
+                target_transform = hsi_ref.transform
+                target_width = hsi_ref.width
+                target_height = hsi_ref.height
+                
+                print(f"Co-registering MSI to HSI reference: {target_width}x{target_height}, CRS: {target_crs}")
+                
+                with rasterio.open(multispectral_path) as msi_src:
+                    # Prepare output metadata
+                    output_meta = msi_src.meta.copy()
+                    output_meta.update({
+                        'crs': target_crs,
+                        'transform': target_transform,
+                        'width': target_width,
+                        'height': target_height
+                    })
+                    
+                    # Create output array
+                    coregistered_data = np.zeros((msi_src.count, target_height, target_width), dtype=msi_src.dtypes[0])
+                    
+                    # Reproject each band
+                    for band_idx in range(1, msi_src.count + 1):
+                        reproject(
+                            source=msi_src.read(band_idx),
+                            destination=coregistered_data[band_idx - 1],
+                            src_transform=msi_src.transform,
+                            src_crs=msi_src.crs,
+                            dst_transform=target_transform,
+                            dst_crs=target_crs,
+                            resampling=Resampling.bilinear
+                        )
+                    
+                    # Save co-registered MSI
+                    with rasterio.open(coregistered_path, 'w', **output_meta) as dst:
+                        dst.write(coregistered_data)
+                    
+                    print(f"Co-registration completed: {coregistered_path}")
+                    return coregistered_path
+                    
+        except Exception as e:
+            print(f"Co-registration failed: {e}")
+            print("Proceeding with original MSI data")
+            return multispectral_path
+
     def enhance_hyperspectral_image(self, multispectral_path, hyperspectral_path,
                                   patch_size=DEFAULT_PATCH_SIZE, stride=DEFAULT_STRIDE,
                                   guide_radius=DEFAULT_GUIDE_RADIUS, detail_weight=DEFAULT_DETAIL_WEIGHT):
-        """Perform hyperspectral image enhancement using HSIEnhancer."""
+        """Perform hyperspectral image enhancement using HSIEnhancer with spatial validation and co-registration."""
         try:
-            enhancer = HSIEnhancer(multispectral_path, hyperspectral_path)
+            # Add spatial validation before enhancement
+            self._validate_spatial_alignment(multispectral_path, hyperspectral_path)
+            
+            # Perform co-registration if needed
+            aligned_msi_path, aligned_hsi_path = self._coregister_datasets(multispectral_path, hyperspectral_path)
+            
+            # Reduce guide_radius to minimize spatial artifacts
+            adjusted_guide_radius = min(guide_radius, 3)  # Cap at 3 to reduce boundary effects
+            
+            print(f"Enhancement parameters: patch_size={patch_size}, stride={stride}")
+            print(f"Guide radius adjusted from {guide_radius} to {adjusted_guide_radius}")
+            
+            enhancer = HSIEnhancer(aligned_msi_path, aligned_hsi_path)
             enhanced_data = enhancer.fuse_to_enhance(
                 patch_size=patch_size,
                 stride=stride,
-                guide_radius=guide_radius,
+                guide_radius=adjusted_guide_radius,  # Use adjusted radius
                 detail_weight=detail_weight
             )
+            
+            print(f"Enhanced data shape: {enhanced_data.shape}")
+            
+            # Clean up temporary co-registered file if created
+            if aligned_msi_path != multispectral_path and os.path.exists(aligned_msi_path):
+                os.remove(aligned_msi_path)
+                print("Cleaned up temporary co-registered file")
+            
             return enhanced_data
         except Exception as e:
             raise Exception(f"Error in hyperspectral enhancement: {e}")
+    
+    def _validate_spatial_alignment(self, multispectral_path, hyperspectral_path):
+        """Validate spatial alignment between MSI and HSI datasets."""
+        try:
+            with rasterio.open(multispectral_path) as msi, rasterio.open(hyperspectral_path) as hsi:
+                print("=== Spatial Alignment Validation ===")
+                print(f"MSI shape: {msi.shape} (H={msi.height}, W={msi.width}, Bands={msi.count})")
+                print(f"HSI shape: {hsi.shape} (H={hsi.height}, W={hsi.width}, Bands={hsi.count})")
+                print(f"MSI CRS: {msi.crs}")
+                print(f"HSI CRS: {hsi.crs}")
+                print(f"MSI bounds: {msi.bounds}")
+                print(f"HSI bounds: {hsi.bounds}")
+                print(f"MSI resolution: {msi.res}")
+                print(f"HSI resolution: {hsi.res}")
+                
+                # Check CRS alignment
+                if msi.crs != hsi.crs:
+                    print("WARNING: CRS mismatch detected!")
+                    print("This may cause spatial alignment issues.")
+                
+                # Check bounds overlap
+                msi_bounds = msi.bounds
+                hsi_bounds = hsi.bounds
+                
+                overlap_left = max(msi_bounds.left, hsi_bounds.left)
+                overlap_bottom = max(msi_bounds.bottom, hsi_bounds.bottom)
+                overlap_right = min(msi_bounds.right, hsi_bounds.right)
+                overlap_top = min(msi_bounds.top, hsi_bounds.top)
+                
+                if overlap_left >= overlap_right or overlap_bottom >= overlap_top:
+                    raise ValueError("No spatial overlap between MSI and HSI datasets!")
+                
+                overlap_area = (overlap_right - overlap_left) * (overlap_top - overlap_bottom)
+                msi_area = (msi_bounds.right - msi_bounds.left) * (msi_bounds.top - msi_bounds.bottom)
+                hsi_area = (hsi_bounds.right - hsi_bounds.left) * (hsi_bounds.top - hsi_bounds.bottom)
+                
+                overlap_ratio_msi = overlap_area / msi_area
+                overlap_ratio_hsi = overlap_area / hsi_area
+                
+                print(f"Spatial overlap: {overlap_ratio_msi:.2%} of MSI, {overlap_ratio_hsi:.2%} of HSI")
+                
+                if overlap_ratio_msi < 0.8 or overlap_ratio_hsi < 0.8:
+                    print("WARNING: Limited spatial overlap may cause boundary artifacts!")
+                
+                print("=== End Validation ===")
+                
+        except Exception as e:
+            print(f"Spatial validation failed: {e}")
+            print("Proceeding with enhancement but results may have spatial artifacts.")
 
     def save_enhanced_data(self, enhanced_data, reference_path, output_path):
-        """Save enhanced hyperspectral data to GeoTIFF."""
+        """Save enhanced hyperspectral data to GeoTIFF with improved metadata handling."""
         with rasterio.open(reference_path) as reference:
             metadata = reference.meta.copy()
+            
+            # Validate enhanced data
+            if len(enhanced_data.shape) != 3:
+                raise ValueError(f"Enhanced data must be 3D (H, W, Bands), got shape: {enhanced_data.shape}")
+            
+            print(f"Saving enhanced data: {enhanced_data.shape} -> {output_path}")
             
             # Update metadata to match enhanced data dimensions
             metadata.update({
                 'height': enhanced_data.shape[0],
                 'width': enhanced_data.shape[1], 
                 'count': enhanced_data.shape[2],
-                'dtype': 'float32'
+                'dtype': 'float32',
+                'compress': 'lzw'  # Add compression
             })
             
             # Recalculate transform if dimensions changed
@@ -215,6 +398,8 @@ class HyperspectralProcessor:
                 # Scale the transform based on dimension ratio
                 scale_y = reference.height / enhanced_data.shape[0]
                 scale_x = reference.width / enhanced_data.shape[1]
+                
+                print(f"Scaling transform: scale_x={scale_x:.3f}, scale_y={scale_y:.3f}")
                 
                 from rasterio.transform import Affine
                 old_transform = reference.transform
@@ -227,7 +412,19 @@ class HyperspectralProcessor:
                     old_transform.f   # top-left y
                 )
                 metadata.update({'transform': new_transform})
+            
+            # Validate data range and handle potential issues
+            data_min = np.nanmin(enhanced_data)
+            data_max = np.nanmax(enhanced_data)
+            print(f"Enhanced data range: [{data_min:.6f}, {data_max:.6f}]")
+            
+            # Check for invalid values
+            if np.any(np.isnan(enhanced_data)) or np.any(np.isinf(enhanced_data)):
+                print("WARNING: Enhanced data contains NaN or Inf values!")
+                enhanced_data = np.nan_to_num(enhanced_data, nan=0.0, posinf=data_max, neginf=data_min)
 
         with rasterio.open(output_path, 'w', **metadata) as destination:
             for band_index in range(enhanced_data.shape[2]):
                 destination.write(enhanced_data[:, :, band_index], band_index + 1)
+    
+        print(f"Successfully saved enhanced HSI with {enhanced_data.shape[2]} bands")
