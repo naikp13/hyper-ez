@@ -1,5 +1,5 @@
-### Hyper-EZ: Hyperspectral Easy Enhancement Package
-Hyper-EZ is a python based package for enhancing hyperspectral imagery using an Imporoved Parallel Patch-wise Sparse Residual learning algorithm (improved p2sr), an upgraded version of the p2sr algorithm published in https://www.mdpi.com/2072-4292/17/11/1878). It combines Sentinel-2 multispectral data and very ESRI high-resolution optical images through a fully automated architecture using a sophisticated reconstruction and enhancement process to increase the spatial resolution of hyperspectral imaging data while preserving spectral information.
+### hyperEZ: Hyperspectral Easy Enhancement Package
+hyperEZ is a python based package for enhancing hyperspectral imagery using an Imporoved Parallel Patch-wise Sparse Residual learning algorithm (improved p2sr), an upgraded version of the p2sr algorithm published in https://www.mdpi.com/2072-4292/17/11/1878). It combines Sentinel-2 multispectral data and very ESRI high-resolution optical images through a fully automated architecture using a sophisticated reconstruction and enhancement process to increase the spatial resolution of hyperspectral imaging data while preserving spectral information.
 
 The package also provides a module for integrating UAV-based RGB or multispectral imagery to super-resolve low-resolution satellite hyperspectral data. The approach is designed to enable cost-effective UAV flights equipped with lightweight optical or multispectral sensors for enhancing hyperspecrtral satellite imagery resolution over targeted areas of interest. This work was carried out within the HyperUAV project (CASUS Open Projects), funded by the German Federal Ministry of Education and Research under Grant No. 1089999008 at Helmholtz-Zentrum Dresden-Rossendorf.
 
@@ -107,7 +107,7 @@ This project is licensed under the MIT License.
 
 ## Citation
 
-This is a pre-release version. The hyper-ez github package is under-development and the final version will be published soon. Please cite the following paper if this package was used, 
+This is a pre-release version. The hyperEZ github package is under-development and the final version will be published soon. Please cite the following paper if this package is used, 
 ```bibtex
 @article{naik2025scalable,
   author = {Parth Naik and Rupsa Chakraborty and Sam Thiele and Richard Gloaguen},
