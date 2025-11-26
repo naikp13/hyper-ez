@@ -11,8 +11,8 @@ Original file is located at
 """Hyper-EZ: Hyperspectral Image Enhancement Package."""
 
 __version__ = "1.0.0"
-__author__ = "Your Name"
-__email__ = "your.email@example.com"
+__author__ = "Parth Naik"
+__email__ = "parthnaik1993@gmail.com"
 
 from .config import setup_matplotlib_style
 from .data_acquisition import SatelliteDataAcquisition, DataDownloader
