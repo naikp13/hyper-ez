@@ -16,7 +16,7 @@ import rasterio
 from rasterio.crs import CRS
 from rasterio.warp import transform_bounds, reproject, Resampling
 from rasterio.transform import from_bounds as transform_from_bounds
-from hsi_enhancement.src import HSIEnhancer
+from hyEnhance.src import HSIEnhancer
 
 from .config import (ESRI_IMAGERY_URL, HIGH_RESOLUTION_METERS,
                     DEFAULT_PATCH_SIZE, DEFAULT_STRIDE,
