@@ -139,7 +139,7 @@ class HyperspectralProcessor:
         """Save enhanced hyperspectral data to GeoTIFF."""
         with rasterio.open(reference_path) as reference:
             metadata = reference.meta.copy()
-            metadata.update(count=enhanced_data.shape[2], dtype='float32')
+            metadata.update(driver="GTiff",count=enhanced_data.shape[2], dtype='float32')
 
         with rasterio.open(output_path, 'w', **metadata) as destination:
             for band_index in range(enhanced_data.shape[2]):
