@@ -1,6 +1,8 @@
 ### HyperEZ: Hyperspectral Easy Enhancement Package
 HyperEZ is a platform for enhancing hyperspectral imaging data using the P2SR algorithm published in https://www.mdpi.com/2072-4292/17/11/1878. It combines Sentinel-2 multispectral data and very high-resolution ESRI optical images through a fully automated architecture using a sophisticated enhancement process to increase the spatial resolution of hyperspectral imaging data while preserving spectral information.
 
+![Output](figures/fig1.png)
+
 The package also provides a module for integrating UAV-based RGB or MSI to super-resolve low-resolution satellite hyperspectral data. The approach is designed to enable cost-effective UAV flights equipped with lightweight optical or multispectral sensors for enhancing hyperspecrtral satellite imagery resolution over targeted areas of interest. This work was carried out within the HyperUAV project (Funded by German Federal Ministry of Research, Technology and Space), under Grant No. 1089999008 at Helmholtz-Zentrum Dresden-Rossendorf.
 
 ### Key Components
