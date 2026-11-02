@@ -56,6 +56,10 @@ The enhancement process follows these steps:
 7. **Super-Enhancement**: Further enhance using high-resolution imagery
 8. **Visualization**: Generate false color composites
 
+## Sentinel-2 enhancement with ESRI imagery
+
+[`demo/demo_sentinel2_esri_enhancement.ipynb`](demo/demo_sentinel2_esri_enhancement.ipynb) applies the same P2SR method to Sentinel-2 itself: the 12 Sentinel-2 L2A bands (10 m grid) are the low-resolution spectral input and ESRI World Imagery RGB (2 m) is the high-resolution guide. The notebook searches the scene on AWS Earth Search, reads only the needed window of each band, downloads the ESRI guide with `HyperspectralProcessor.acquire_high_resolution_imagery`, enhances with hyEnhance `HSIEnhancer`, saves a georeferenced 2 m GeoTIFF and checks spectral consistency. An optional reduced-resolution check (Wald protocol: 50 m to 10 m with Sentinel-2's own RGB as the guide) scores the method against bicubic upsampling.
+
 ## Data Sources
 
 - **Hyperspectral Data**: EnMAP validation clips
