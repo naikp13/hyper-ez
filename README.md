@@ -56,9 +56,9 @@ The enhancement process follows these steps:
 7. **Super-Enhancement**: Further enhance using high-resolution imagery
 8. **Visualization**: Generate false color composites
 
-## Sentinel-2 enhancement with ESRI imagery
+## Monitoring a site with enhanced Sentinel-2
 
-[`demo/demo_sentinel2_esri_enhancement.ipynb`](demo/demo_sentinel2_esri_enhancement.ipynb) applies the same P2SR method to Sentinel-2 itself: the 12 Sentinel-2 L2A bands (10 m grid) are the low-resolution spectral input and ESRI World Imagery RGB (2 m) is the high-resolution guide. The notebook searches the scene on AWS Earth Search, reads only the needed window of each band, downloads the ESRI guide with `HyperspectralProcessor.acquire_high_resolution_imagery`, enhances with hyEnhance `HSIEnhancer`, saves a georeferenced 2 m GeoTIFF and checks spectral consistency. An optional reduced-resolution check (Wald protocol: 50 m to 10 m with Sentinel-2's own RGB as the guide) scores the method against bicubic upsampling.
+[`demo/demo_sentinel2_esri_enhancement.ipynb`](demo/demo_sentinel2_esri_enhancement.ipynb) applies the same P2SR method to Sentinel-2 itself and uses it to monitor a site, such as a construction site, over time. Inputs are an AOI polygon file (shapefile `.shp` + `.shx` + `.dbf` + `.prj`, zipped shapefile, GeoPackage or GeoJSON) and a list of dates. For each date the notebook picks the closest Sentinel-2 L2A scene that is cloud-free over the AOI (SCL check) and enhances its 12 bands from 10 m to 2 m with hyEnhance `HSIEnhancer`, using ESRI World Imagery as the guide. It then reports NDVI / BSI / NDBI over time, change-vector change maps with change types (vegetation cleared, new bright surface, earthworks, regrowth), changed area per interval at 2 m and 10 m, and a CSV summary. An optional Wald-protocol check scores the method against bicubic upsampling. The default example is the Tesla Gigafactory Berlin-Brandenburg site, 2020–2021.
 
 ## Data Sources
 
